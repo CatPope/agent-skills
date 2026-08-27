@@ -1,0 +1,9 @@
+{
+  "id": "supervisor-worker",
+  "name": "Supervisor–Worker (Claude 감독 · Codex 구현)",
+  "status": "active",
+  "summary": "Claude가 명세·역할배분·검수를 맡고 Codex가 정밀 구현을 맡는 Human-in-the-loop 오케스트레이션. 같은 Codex 세션을 유지하며 구조화 완료보고(JSON)를 받는다.",
+  "requires": ["codex CLI (openai/codex)", "Python >= 3.9"],
+  "skills": ["role-split", "codex-delegate", "codex-completion-report"],
+  "doc": "docs/workflows/supervisor-worker.md"
+}

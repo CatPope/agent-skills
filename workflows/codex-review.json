@@ -1,0 +1,10 @@
+{
+  "id": "codex-review",
+  "name": "Claude 개발 · Codex 검토 (openai/codex-plugin-cc)",
+  "status": "planned",
+  "summary": "역할이 뒤집힌 구성. Claude가 설계와 개발을 맡고, Codex가 적대적 검토자로 결과물을 검증한다. openai/codex-plugin-cc 를 경유하므로 codex-delegate 의 CLI 메커니즘을 쓰지 않는다.",
+  "requires": ["openai/codex-plugin-cc"],
+  "skills": [],
+  "doc": null,
+  "note": "아직 구성 전. _core 5종은 역할이 뒤집혀도 그대로 쓰이므로 재사용 대상이다. 검토 주체가 Codex가 되므로 work-review 의 '누가 검증하는가' 전제를 이 워크플로우용으로 다시 볼 것."
+}

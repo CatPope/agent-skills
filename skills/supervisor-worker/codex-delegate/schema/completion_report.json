@@ -1,0 +1,120 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "modified_files",
+    "commands_run",
+    "tests",
+    "unfinished",
+    "blocked",
+    "blocked_reason"
+  ],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "무엇을 했는지 2~4문장. 추측이나 계획이 아니라 실제로 수행한 것만."
+    },
+    "modified_files": {
+      "type": "array",
+      "description": "이 세션에서 손댄 모든 파일. 하나도 안 고쳤으면 빈 배열.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "change",
+          "note"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "작업 디렉토리 기준 상대경로"
+          },
+          "change": {
+            "type": "string",
+            "enum": [
+              "created",
+              "edited",
+              "deleted",
+              "moved"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "description": "무엇을 바꿨는지 한 줄"
+          }
+        }
+      }
+    },
+    "commands_run": {
+      "type": "array",
+      "description": "실행한 명령과 종료코드. 검증의 근거이므로 실제로 돌린 것만 적는다.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command",
+          "exit_code"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ran",
+        "detail"
+      ],
+      "properties": {
+        "ran": {
+          "type": "boolean",
+          "description": "테스트를 실제로 실행했는가. 실행 안 했으면 false — 추정으로 true 금지."
+        },
+        "detail": {
+          "type": "string",
+          "description": "실행했다면 결과 요약, 안 했다면 그 이유."
+        }
+      }
+    },
+    "unfinished": {
+      "type": "array",
+      "description": "지시받았으나 완료하지 못한 것. 전부 끝냈으면 빈 배열. 이 필드를 비우려고 억지로 끝냈다고 적지 말 것.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "reason"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "blocked": {
+      "type": "boolean",
+      "description": "사람의 결정 없이는 더 진행할 수 없는 상태인가."
+    },
+    "blocked_reason": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "blocked 가 true 일 때 무엇을 결정해줘야 하는지 구체적으로. 아니면 null."
+    }
+  }
+}
