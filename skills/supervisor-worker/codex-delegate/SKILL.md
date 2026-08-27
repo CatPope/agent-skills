@@ -158,5 +158,5 @@ turns[] = { at, kind(start|send), events(로그경로), report(완료보고 JSON
     검증: 세션 유지(토큰 회수 성공), 파일 수정 누적 보고, 상태 파일 관리 모두 확인.
   - 2026-08-26 — 지시서 작성과 결과 검증을 [[task-brief]]·[[work-review]] 로 분리하고
     메커니즘만 남겼다. 두 기능은 Codex 위임이 아닐 때도 쓰이기 때문.
-    실제 업무(주조 데이터셋 조사)에 적용해 `unfinished` 8건이 정직하게 올라오는 것을 확인.
+    실제 조사 업무에 적용해 `unfinished` 8건이 정직하게 올라오는 것을 확인.
     저장 위치를 `~/.agents/skills` 로 옮기고 `~/.claude/skills` 는 정션으로 연결(규약 일치).
