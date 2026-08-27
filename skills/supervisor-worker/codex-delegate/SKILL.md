@@ -57,7 +57,7 @@ audience: manager
 
 ```bash
 PY="${CODEX_DELEGATE_PY:-python}"   # 필요하면 이 환경변수로 인터프리터 지정
-S="$HOME/.agents/skills/codex-delegate/scripts/codex_task.py"
+S="<이 스킬 폴더>/scripts/codex_task.py"   # 설치 위치는 환경마다 다르다
 
 # 새 작업 시작 — 지시서는 반드시 파일로 (긴 지시서는 명령행 한도에 걸린다)
 $PY "$S" start <작업명> --dir <작업디렉토리> --prompt-file 지시서.md
@@ -149,7 +149,7 @@ turns[] = { at, kind(start|send), events(로그경로), report(완료보고 JSON
 - 업데이트 횟수: 2
 - 최근 업데이트: 2026-08-27
 - 사용 이력:
-  - 2026-08-27 — `Claude_Codex_Supervisor_Worker_워크플로우.md`(Codex 검토 완료본)에 맞춰
+  - 2026-08-27 — 확정된 워크플로우 정의(`docs/workflows/supervisor-worker.md`)에 맞춰
     작업흐름도 갱신: blocked는 검토를 건너뛰고 사용자에게 직행, NO를 재작업/재설계로 분리,
     Codex에 하달한 문서·skill 갱신도 재검토 루프 추가, Claude 직접 작업도 완료보고→검토
     거치도록 명시.
