@@ -96,7 +96,7 @@ turns[] = { at, kind(start|send), events(로그경로), report(완료보고 JSON
 
 | | JSON 완료보고 | 마크다운 완료 보고서 |
 |---|---|---|
-| 정본 | 이 스킬의 `--output-schema` | `codex-completion-report`(패널 작업은 `panel-completion-report`) |
+| 정본 | 이 스킬의 `--output-schema` | [[codex-completion-report]] — 프로젝트에 더 구체적인 완료보고 스킬이 있으면 그쪽 우선 |
 | 목적 | **기계 검증** — 검토자가 필드로 대조 | **사람이 읽는 상세 기록** — 근거·수치·재현 방법 |
 | 위치 | `.claude-codex/state.json` 의 `turns[].report` | `<프로젝트루트>/reports/YYYY-MM-DD_<작업명>/report.md` |
 | 누가 | 스키마가 강제 (Codex가 못 빠뜨림) | Codex가 스킬에 따라 작성 |
