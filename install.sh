@@ -72,7 +72,7 @@ done
 
 mkdir -p "$CLAUDE_DIR" "$AGENTS_DIR"
 
-linked=0; skipped=0
+linked=0; skipped=0; failed=()
 for src in "${TARGETS[@]}"; do
   name="$(basename "$src")"
   for dir in "$CLAUDE_DIR" "$AGENTS_DIR"; do
@@ -81,21 +81,45 @@ for src in "${TARGETS[@]}"; do
       if [ -L "$link" ] && [ "$(readlink "$link")" = "$src" ]; then
         skipped=$((skipped+1)); continue
       fi
+      # 심링크가 아닌 실제 디렉터리는 --force 로도 지우지 않는다. 안의 내용이 유일본일 수 있다.
+      if [ ! -L "$link" ]; then
+        failed+=("$link  (실제 디렉터리 — 내용을 확인해 옮기거나 지운 뒤 다시 실행)")
+        continue
+      fi
       if [ "$FORCE" != 1 ]; then
-        echo "이미 있음(건너뜀): $link  -> 교체하려면 --force" >&2
+        echo "다른 곳을 가리키는 링크(건너뜀): $link  -> 교체하려면 --force" >&2
         skipped=$((skipped+1)); continue
       fi
       unlink "$link" 2>/dev/null || true
+      if [ -e "$link" ] || [ -L "$link" ]; then
+        failed+=("$link  (기존 링크 제거 실패)"); continue
+      fi
     fi
-    ln -s "$src" "$link"
-    linked=$((linked+1))
+    ln -s "$src" "$link" 2>/dev/null || true
+    # 만들었다고 가정하지 않는다 — 실제로 그 대상을 가리키는지 확인하고 센다
+    if [ -L "$link" ] && [ "$(readlink "$link")" = "$src" ]; then
+      linked=$((linked+1))
+    else
+      failed+=("$link  (링크 생성 실패)")
+    fi
   done
 done
 
 printf '%s' "$WORKFLOW" > "$MARKER"
 echo
-echo "설치 완료: $(field "$MF" name)"
-echo "  링크 ${linked}개 생성, ${skipped}개 건너뜀"
+echo "설치: $(field "$MF" name)"
+echo "  링크 ${linked}개 생성, ${skipped}개 건너뜀, ${#failed[@]}개 실패"
 echo "  대상: $CLAUDE_DIR / $AGENTS_DIR"
 echo "  스킬: $(for t in "${TARGETS[@]}"; do printf '%s ' "$(basename "$t")"; done)"
+
+if [ "${#failed[@]}" -gt 0 ]; then
+  echo
+  echo "처리하지 못한 항목 — 이 경로들은 아직 저장소를 가리키지 않습니다:" >&2
+  for f in "${failed[@]}"; do echo "  - $f" >&2; done
+  echo >&2
+  echo "실제 디렉터리는 자동으로 지우지 않습니다. 안에 있는 것이 유일본일 수 있기 때문입니다." >&2
+  echo "내용을 확인해 저장소로 옮겼거나 더 필요 없다고 판단되면, 직접 지운 뒤 다시 실행하세요." >&2
+  echo >&2
+  exit 1
+fi
 echo

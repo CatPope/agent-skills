@@ -75,7 +75,7 @@ foreach ($dir in @($ClaudeDir, $AgentsDir)) {
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
-$linked = 0; $skipped = 0
+$linked = 0; $skipped = 0; $failed = @()
 foreach ($src in $targets) {
   $name = Split-Path $src -Leaf
   foreach ($dir in @($ClaudeDir, $AgentsDir)) {
@@ -86,22 +86,45 @@ foreach ($src in $targets) {
         $skipped++
         continue
       }
+      # 실제 폴더는 -Force 로도 지우지 않는다. 그 안의 내용이 유일본일 수 있다.
+      if ($item.LinkType -ne "Junction" -and $item.LinkType -ne "SymbolicLink") {
+        $failed += "$link  (실제 폴더 — 내용을 확인해 옮기거나 지운 뒤 다시 실행)"
+        continue
+      }
       if (-not $Force) {
-        Write-Warning "이미 있음(건너뜀): $link  -> 교체하려면 -Force"
+        Write-Warning "다른 곳을 가리키는 링크(건너뜀): $link  -> 교체하려면 -Force"
         $skipped++
         continue
       }
       cmd /c rd /q "$link" | Out-Null
+      if (Test-Path $link) {
+        $failed += "$link  (기존 링크 제거 실패)"
+        continue
+      }
     }
     cmd /c mklink /J "$link" "$src" | Out-Null
-    $linked++
+    # 만들었다고 가정하지 않는다 — 실제로 정션이 됐는지 확인하고 센다
+    $made = Get-Item $link -Force -ErrorAction SilentlyContinue
+    if ($made -and $made.LinkType -eq "Junction") { $linked++ }
+    else { $failed += "$link  (링크 생성 실패)" }
   }
 }
 
 Set-Content -Path $Marker -Value $wf.id -Encoding utf8
 Write-Host ""
-Write-Host ("설치 완료: {0}" -f $wf.name)
-Write-Host ("  링크 {0}개 생성, {1}개 건너뜀" -f $linked, $skipped)
+Write-Host ("설치: {0}" -f $wf.name)
+Write-Host ("  링크 {0}개 생성, {1}개 건너뜀, {2}개 실패" -f $linked, $skipped, $failed.Count)
 Write-Host ("  대상: {0} / {1}" -f $ClaudeDir, $AgentsDir)
 Write-Host ("  스킬: {0}" -f (($targets | ForEach-Object { Split-Path $_ -Leaf }) -join ", "))
+
+if ($failed.Count -gt 0) {
+  Write-Host ""
+  Write-Host "처리하지 못한 항목 — 이 경로들은 아직 저장소를 가리키지 않습니다:" -ForegroundColor Yellow
+  foreach ($f in $failed) { Write-Host ("  - {0}" -f $f) -ForegroundColor Yellow }
+  Write-Host ""
+  Write-Host "실제 폴더는 자동으로 지우지 않습니다. 안에 있는 것이 유일본일 수 있기 때문입니다." -ForegroundColor Yellow
+  Write-Host "내용을 확인해 저장소로 옮겼거나 더 필요 없다고 판단되면, 그 폴더를 직접 지운 뒤 다시 실행하세요." -ForegroundColor Yellow
+  Write-Host ""
+  exit 1
+}
 Write-Host ""
