@@ -40,6 +40,18 @@ def read_events(path):
     return rows
 
 
+READ_VERBS = (
+    "get-content", "get-item", "get-childitem", "test-path", "select-string",
+    "cat ", "head ", "tail ", "ls ", "rg ", "grep ", "find ", "type ",
+)
+
+
+def is_read_only(cmd):
+    """읽기만 하는 명령인가. 검증 루프와 막힌 상태를 가르는 데 쓴다."""
+    low = str(cmd).lower().lstrip("$& (\"'")
+    return any(v in low[:120] for v in READ_VERBS)
+
+
 def latest_log(base, task):
     files = sorted(glob.glob(os.path.join(base, task, "events_*.jsonl")))
     return files[-1] if files else None
@@ -86,7 +98,9 @@ def snapshot(base, task, tail):
     flags = []
     repeats = collections.Counter(cmds)
     worst, n = (repeats.most_common(1) or [("", 0)])[0]
-    if n >= 4:
+    # 산출물을 다시 읽어보는 검증 루프는 원래 같은 명령을 반복한다 — 방황이 아니다.
+    verifying = bool(changed) and is_read_only(worst)
+    if n >= 4 and not verifying:
         flags.append(f"같은 명령 {n}회 반복 — 같은 벽에 부딪히는 중일 수 있다")
     if len(cmds) >= 20 and not changed:
         flags.append(f"명령 {len(cmds)}건인데 파일 변경 0 — 조사만 하고 못 쓰고 있다")
