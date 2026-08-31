@@ -105,7 +105,11 @@ def snapshot(base, task, tail):
     if len(cmds) >= 20 and not changed:
         flags.append(f"명령 {len(cmds)}건인데 파일 변경 0 — 조사만 하고 못 쓰고 있다")
     # 이미 끝난 작업은 "기록 없음"이 정상이다. 완료보고 파일이 있으면 침묵한다.
-    finished = bool(glob.glob(os.path.join(os.path.dirname(path), "report_*.json")))
+    # 단 **이 실행의** 보고여야 한다. 세션을 재사용하면 지난 턴의 report_*.json 이 남아 있어,
+    # 아무 보고나 세면 새 작업이 시작부터 "완료"로 보이고 무기록 감지가 죽는다.
+    # events_<stamp>.jsonl 과 report_<stamp>.json 은 같은 stamp 를 쓰므로 그것으로 맞춘다.
+    stamp = os.path.basename(path)[len("events_"):-len(".jsonl")]
+    finished = os.path.exists(os.path.join(os.path.dirname(path), f"report_{stamp}.json"))
     if age > 900 and not finished:
         flags.append(f"{age/60:.0f}분째 기록 없음 — 멈췄거나 긴 작업 중")
     if searches >= 12 and not changed:
