@@ -151,6 +151,12 @@ def render(s):
 
 
 def main():
+    # Windows 기본 콘솔은 cp949 라 ⚠ 등에서 UnicodeEncodeError 가 난다.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     ap = argparse.ArgumentParser(description="위임 작업 실행 중 감시")
     ap.add_argument("--dir", required=True, help="작업 디렉토리(.claude-codex 의 부모)")
     ap.add_argument("--task", action="append", help="감시할 작업명. 생략하면 전부")
@@ -178,7 +184,12 @@ def main():
             blocks.append(render(s) if s else f"=== {t}  이벤트 로그 없음")
         text = "\n".join(blocks)
 
-        print(text, flush=True)
+        try:
+            print(text, flush=True)
+        except UnicodeEncodeError:
+            # cp949 콘솔은 ⚠ 를 못 찍는다. 경고를 띄우려다 감시자가 죽으면 안 된다.
+            enc = getattr(sys.stdout, "encoding", None) or "ascii"
+            print(text.encode(enc, "replace").decode(enc, "replace"), flush=True)
         if args.out:
             os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
             with io.open(args.out, "a", encoding="utf-8") as f:
