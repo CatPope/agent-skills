@@ -23,6 +23,8 @@ import os
 import sys
 import time
 
+import codex_usage                      # 같은 scripts/ 폴더 — 점유율·한도 공용 모듈
+
 STATE_DIR = ".claude-codex"
 
 
@@ -52,65 +54,15 @@ def is_read_only(cmd):
     return any(v in low[:120] for v in READ_VERBS)
 
 
-ROLLOUT_GLOB = os.path.join(
-    os.path.expanduser("~"), ".codex", "sessions", "*", "*", "*", "rollout-*-%s.jsonl")
-
-
-def _tail_lines(path, want, max_bytes=8 * 1024 * 1024):
-    """파일 끝에서부터 `want` 가 들어간 마지막 줄을 찾는다.
-
-    롤아웃은 100MB 를 넘긴다(실측 107MB). 전부 읽으면 감시 한 바퀴가 수십 초로 늘어져
-    10분 주기 감시가 제 역할을 못 한다. 뒤에서 조금만 읽는다.
-    """
-    size = os.path.getsize(path)
-    with io.open(path, "rb") as f:
-        f.seek(max(0, size - max_bytes))
-        chunk = f.read()
-    if size > max_bytes:
-        chunk = chunk.split(b"\n", 1)[-1]          # 잘린 첫 줄은 버린다
-    text = chunk.decode("utf-8", errors="replace")
-    for line in reversed(text.splitlines()):
-        if want in line and line.startswith("{"):
-            try:
-                return json.loads(line)
-            except ValueError:
-                continue
-    return None
-
-
 def rollout_status(work_dir, task):
     """세션의 컨텍스트 점유율과 사용량 한도를 읽는다.
 
-    `codex exec --json` 스트림에는 이 값이 안 나온다. Codex 는 별도로
-    ~/.codex/sessions/.../rollout-*.jsonl 에 `token_count` 를 남기고, 거기에만
-    `model_context_window` 와 `rate_limits` 가 붙는다. 사용량 한도로 턴이 죽는 일을
-    사후가 아니라 사전에 보려면 여기를 봐야 한다.
+    읽는 방법은 codex_usage 에 모아 뒀다 — 실행기(codex_task)와 압축기(codex_compact)가
+    같은 값을 봐야 하기 때문이다. 복사본이 갈라지면 감시자가 보는 수치와 실행기가
+    판단하는 수치가 달라진다.
     """
-    state = os.path.join(work_dir, STATE_DIR, "state.json")
-    if not os.path.exists(state):
-        return None
-    try:
-        tid = json.load(io.open(state, encoding="utf-8"))["tasks"][task]["thread_id"]
-    except (ValueError, KeyError):
-        return None
-    files = glob.glob(ROLLOUT_GLOB % tid)
-    if not files:
-        return None
-    ev = _tail_lines(max(files, key=os.path.getmtime), '"token_count"')
-    if not ev:
-        return None
-    info = (ev.get("payload") or {}).get("info") or {}
-    last = info.get("last_token_usage") or {}
-    rl = (ev.get("payload") or {}).get("rate_limits") or {}
-    window = info.get("model_context_window") or 0
-    ctx = last.get("input_tokens") or 0
-    return {
-        "at": (ev.get("timestamp") or "")[:19].replace("T", " "),
-        "ctx": ctx, "window": window,
-        "pct": (ctx / window * 100) if window else 0,
-        "p5": (rl.get("primary") or {}).get("used_percent"),
-        "weekly": (rl.get("secondary") or {}).get("used_percent"),
-    }
+    tid = codex_usage.thread_of(work_dir, task)
+    return codex_usage.read_usage(tid) if tid else None
 
 
 def latest_log(base, task):
@@ -182,7 +134,10 @@ def snapshot(base, task, tail):
 
     usage = rollout_status(os.path.dirname(base), task)
     if usage:
-        if usage["p5"] is not None and usage["p5"] >= 85:
+        # 창이 이미 지난 한도 값으로 경고하면 안 된다 — 하루 전 92% 를 보고
+        # "곧 끊긴다"고 말하게 된다. 지금 사용량은 다음 요청이 나가야 알 수 있다.
+        if (usage["p5"] is not None and usage["p5"] >= 85
+                and not codex_usage.is_stale(usage)):
             flags.append(f"5시간 한도 {usage['p5']:.0f}% — 곧 끊긴다. 새 턴을 시작하지 마라")
         if usage["pct"] >= 80:
             flags.append(f"컨텍스트 {usage['pct']:.0f}% — 곧 자동압축이 걸린다(정보 손실 지점)")
@@ -201,9 +156,7 @@ def render(s):
                f"웹검색 {s['searches']} · 메시지 {len(s['messages'])}")
     u = s.get("usage")
     if u:
-        out.append(f"    컨텍스트 {u['ctx']:,}/{u['window']:,} ({u['pct']:.0f}%)"
-                   f" · 5시간한도 {u['p5']}% · 주간 {u['weekly']}%"
-                   f"   [{u['at']} UTC 기준]")
+        out.append("    " + codex_usage.format_usage(u))
 
     if s["changed"]:
         seen, uniq = set(), []

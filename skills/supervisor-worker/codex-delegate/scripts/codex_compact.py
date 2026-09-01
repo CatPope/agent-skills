@@ -26,7 +26,6 @@
 from __future__ import annotations
 
 import argparse
-import glob
 import io
 import json
 import os
@@ -37,11 +36,11 @@ import sys
 import threading
 import time
 
+import codex_usage                      # 같은 scripts/ 폴더 — 점유율·한도 공용 모듈
+
 STATE_DIR = ".claude-codex"
 KNOWN_CODEX = os.path.join(os.path.expanduser("~"),
                            "AppData", "Local", "Programs", "OpenAI", "Codex", "bin", "codex.exe")
-ROLLOUT_GLOB = os.path.join(os.path.expanduser("~"),
-                            ".codex", "sessions", "*", "*", "*", "rollout-*-%s.jsonl")
 
 
 def find_codex() -> str:
@@ -67,38 +66,8 @@ def thread_of(work_dir: str, task: str) -> tuple[str, str]:
 
 
 def occupancy(thread_id: str):
-    """롤아웃 끝에서 마지막 token_count 를 읽어 점유율·사용량 한도를 돌려준다.
-
-    롤아웃은 100MB 를 넘길 수 있다(실측 107MB). 뒤에서 8MB 만 읽는다.
-    """
-    files = glob.glob(ROLLOUT_GLOB % thread_id)
-    if not files:
-        return None
-    path = max(files, key=os.path.getmtime)
-    size = os.path.getsize(path)
-    cap = 8 * 1024 * 1024
-    with io.open(path, "rb") as f:
-        f.seek(max(0, size - cap))
-        chunk = f.read()
-    if size > cap:
-        chunk = chunk.split(b"\n", 1)[-1]
-    for line in reversed(chunk.decode("utf-8", errors="replace").splitlines()):
-        if '"token_count"' not in line or not line.startswith("{"):
-            continue
-        try:
-            ev = json.loads(line)
-        except ValueError:
-            continue
-        info = (ev.get("payload") or {}).get("info") or {}
-        rl = (ev.get("payload") or {}).get("rate_limits") or {}
-        ctx = (info.get("last_token_usage") or {}).get("input_tokens") or 0
-        win = info.get("model_context_window") or 0
-        return {"at": (ev.get("timestamp") or "")[:19].replace("T", " "),
-                "ctx": ctx, "window": win, "pct": (ctx / win * 100) if win else 0,
-                "p5": (rl.get("primary") or {}).get("used_percent"),
-                "weekly": (rl.get("secondary") or {}).get("used_percent"),
-                "path": path}
-    return None
+    """점유율·사용량 한도를 읽는다. 읽는 방법은 codex_usage 에 모아 뒀다."""
+    return codex_usage.read_usage(thread_id)
 
 
 class AppServer:
@@ -186,9 +155,7 @@ def main() -> int:
 
     before = occupancy(tid)
     if before:
-        print(f"[압축 전] 컨텍스트 {before['ctx']:,}/{before['window']:,} ({before['pct']:.1f}%)"
-              f" · 5시간한도 {before['p5']}% · 주간 {before['weekly']}%"
-              f"   [{before['at']} UTC 기준]")
+        print("[압축 전] " + codex_usage.format_usage(before))
     else:
         print("[압축 전] 롤아웃에서 점유율을 읽지 못했습니다(첫 턴 이전일 수 있음)")
 

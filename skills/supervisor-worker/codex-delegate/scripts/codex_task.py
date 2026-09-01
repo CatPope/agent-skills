@@ -31,6 +31,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import codex_usage                      # 같은 scripts/ 폴더 — 점유율·한도를 읽는 공용 모듈
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_SCHEMA = SKILL_DIR / "schema" / "completion_report.json"
 STATE_REL = Path(".claude-codex") / "state.json"
@@ -72,8 +74,27 @@ def now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def decide_fast(args) -> list[str]:
+    """이번 실행을 fast 모드로 걸지 정하고, 붙일 인자를 돌려준다.
+
+    한도는 계정 단위라 **가장 최근 롤아웃**을 본다 — 이 작업의 세션이 아니어도
+    되고, 오히려 그쪽이 더 최신이다. 새 세션을 시작할 때는 자기 롤아웃이 아직
+    없으므로 이 방식이어야 판단이 선다.
+    """
+    if getattr(args, "no_fast_gate", False):
+        return []
+    usage = codex_usage.read_usage()
+    use, why = codex_usage.fast_decision(
+        usage, min_percent=args.fast_min_percent, within_minutes=args.fast_within_minutes)
+    print(f"[속도] {why}")
+    if use:
+        print("[속도] fast 모드 — 속도 1.5배, 크레딧 2.5배로 소모됩니다.")
+    return list(codex_usage.FAST_ARGS) if use else []
+
+
 def run_codex(codex: str, work_dir: Path, prompt: str, *, schema: Path,
-              sandbox: str, resume_id: str | None, run_dir: Path) -> tuple[dict | None, str, str | None]:
+              sandbox: str, resume_id: str | None, run_dir: Path,
+              extra_args: list[str] | None = None) -> tuple[dict | None, str, str | None]:
     """codex exec 를 한 번 호출한다. (보고 dict, 원문, thread_id) 를 돌려준다."""
     run_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -89,6 +110,7 @@ def run_codex(codex: str, work_dir: Path, prompt: str, *, schema: Path,
            "-C", str(work_dir),
            "--output-schema", str(schema),
            "-o", str(out_file)]
+    cmd += list(extra_args or [])       # fast 모드 등. resume 앞이어야 한다(함정 1).
     if resume_id:
         cmd += ["resume", resume_id]
     cmd += [prompt]
@@ -150,7 +172,8 @@ def cmd_start(args) -> int:
     run_dir = work_dir / ".claude-codex" / args.task
     report, events, thread_id = run_codex(
         codex, work_dir, prompt, schema=Path(args.schema),
-        sandbox=args.sandbox, resume_id=None, run_dir=run_dir)
+        sandbox=args.sandbox, resume_id=None, run_dir=run_dir,
+        extra_args=decide_fast(args))
 
     if not thread_id:
         sys.exit("thread_id 를 얻지 못했습니다. 세션을 이어갈 수 없으니 로그를 확인하세요: " + events)
@@ -184,7 +207,8 @@ def cmd_send(args) -> int:
     sandbox = args.sandbox or task.get("sandbox", "workspace-write")
     report, events, _ = run_codex(
         codex, work_dir, prompt, schema=Path(args.schema),
-        sandbox=sandbox, resume_id=task["thread_id"], run_dir=run_dir)
+        sandbox=sandbox, resume_id=task["thread_id"], run_dir=run_dir,
+        extra_args=decide_fast(args))
 
     task["turns"].append({"at": now(), "kind": "send", "events": events, "report": report})
     save_state(work_dir, state)
@@ -237,6 +261,14 @@ def main() -> int:
             p.add_argument("--schema", default=str(DEFAULT_SCHEMA))
             p.add_argument("--sandbox", default=None,
                            choices=["read-only", "workspace-write", "danger-full-access"])
+            # fast 모드는 속도 1.5배 · 크레딧 2.5배다. 창이 곧 초기화돼 남은 할당량이
+            # 어차피 사라질 때만 켠다 — 기본 기준은 사용자 확정값(30% / 15분).
+            p.add_argument("--no-fast-gate", action="store_true",
+                           help="사용량이 어떻든 항상 표준 모드로 실행한다")
+            p.add_argument("--fast-min-percent", type=float, default=30.0,
+                           help="5시간 사용량이 이 값 이상일 때만 fast 모드 (기본 30)")
+            p.add_argument("--fast-within-minutes", type=float, default=15.0,
+                           help="초기화가 이 분 안에 올 때만 fast 모드 (기본 15)")
 
     p = sub.add_parser("start", help="새 Codex 세션 시작")
     common(p)
